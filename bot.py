@@ -20,9 +20,16 @@ def callback_query(call):
     prize_id = call.data
     user_id = call.message.chat.id
 
-    img = manager.get_prize_img(prize_id)
-    with open(f'img/{img}', 'rb') as photo:
-        bot.send_photo(user_id, photo)
+    if manager.get_winners_count(prize_id) < 3:
+        result = manager.add_winner(user_id, prize_id)
+        if result:
+            img = manager.get_prize_img(prize_id)
+            with open(f'img/{img}', 'rb') as photo:
+                bot.send_photo(user_id, photo, caption='Поздравляем! Ты получил картинку!')
+        else:
+            bot.send_message(user_id, 'Ты уже получил картинку!')
+    else:
+        bot.send_message(user_id, 'К сожалению, ты не успел получить картинку! Попробуй в следующий раз!')
 
 
 def send_message():
@@ -39,6 +46,14 @@ def shedule_thread():
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+@bot.message_handler(commands=['rating'])
+def handle_rating(message):
+    result = manager.get_rating()
+    result = [f'| @{x[0]:<11} | {x[1]:<11}|\n{"_" * 26}' for x in result]
+    result = '\n'.join(result)
+    result = f'| USER_NAME   | COUNT_PRIZE |\n{"_" * 26}\n' + result
+    bot.send_message(message.chat.id, result)
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
