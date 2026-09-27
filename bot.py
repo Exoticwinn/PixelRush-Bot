@@ -1,6 +1,9 @@
 from telebot import TeleBot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from logic import *
+from logic import DatabaseManager, create_collage, hide_img
+from io import BytesIO
+import cv2
+import os
 import schedule
 import threading
 import time
@@ -54,6 +57,37 @@ def handle_rating(message):
     result = '\n'.join(result)
     result = f'| USER_NAME   | COUNT_PRIZE |\n{"_" * 26}\n' + result
     bot.send_message(message.chat.id, result)
+
+@bot.message_handler(commands=['get_my_score'])
+def get_my_score(message):
+    image_names = sorted(
+        name for name in os.listdir('img')
+        if os.path.isfile(os.path.join('img', name))
+    )
+    if not image_names:
+        bot.reply_to(message, 'Пока нет изображений для коллажа.')
+        return
+
+    winners = {image[0] for image in manager.get_winners_img(message.chat.id)}
+    image_paths = []
+    for image_name in image_names:
+        if image_name in winners:
+            image_paths.append(os.path.join('img', image_name))
+        else:
+            hidden_path = os.path.join('hidden_img', image_name)
+            if not os.path.exists(hidden_path):
+                hide_img(image_name)
+            image_paths.append(hidden_path)
+
+    collage = create_collage(image_paths)
+    success, encoded = cv2.imencode('.jpg', collage)
+    if not success:
+        bot.reply_to(message, 'Не удалось создать коллаж. Попробуй позже.')
+        return
+
+    photo = BytesIO(encoded.tobytes())
+    photo.name = 'my_score.jpg'
+    bot.send_photo(message.chat.id, photo, caption='Твои достижения:')
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):

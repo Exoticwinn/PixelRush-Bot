@@ -3,6 +3,8 @@ from datetime import datetime
 from config import DATABASE 
 import os
 import cv2
+import numpy as np
+from math import ceil, floor, sqrt
 
 class DatabaseManager:
     def __init__(self, database):
@@ -107,6 +109,19 @@ class DatabaseManager:
             cur.execute('SELECT COUNT(*) FROM winners WHERE prize_id = ?', (prize_id,))
             return cur.fetchone()[0]
 
+    def get_winners_img(self, user_id):
+        conn = sqlite3.connect(self.database)
+        try:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT image FROM winners
+                INNER JOIN prizes ON winners.prize_id = prizes.prize_id
+                WHERE user_id = ?
+            ''', (user_id,))
+            return cur.fetchall()
+        finally:
+            conn.close()
+
     def get_rating(self):
         conn = sqlite3.connect(self.database)
         with conn:
@@ -121,6 +136,34 @@ class DatabaseManager:
             ''')
             return cur.fetchall()
   
+def create_collage(image_paths):
+    images = [cv2.imread(path) for path in image_paths]
+    if not images:
+        raise ValueError('Для создания коллажа нужны изображения')
+    if any(image is None for image in images):
+        raise ValueError('Не удалось прочитать одно из изображений')
+
+    tile_height, tile_width = images[0].shape[:2]
+    scale = min(1, 512 / max(tile_height, tile_width))
+    tile_width = max(1, round(tile_width * scale))
+    tile_height = max(1, round(tile_height * scale))
+    images = [cv2.resize(image, (tile_width, tile_height)) for image in images]
+    num_images = len(images)
+    num_cols = max(1, floor(sqrt(num_images)))
+    num_rows = ceil(num_images / num_cols)
+    collage = np.zeros(
+        (num_rows * tile_height, num_cols * tile_width, 3), dtype=np.uint8
+    )
+
+    for index, image in enumerate(images):
+        row, col = divmod(index, num_cols)
+        collage[
+            row * tile_height:(row + 1) * tile_height,
+            col * tile_width:(col + 1) * tile_width,
+        ] = image
+    return collage
+
+
 def hide_img(img_name):
     image = cv2.imread(f'img/{img_name}')
     blurred_image = cv2.GaussianBlur(image, (15, 15), 0)
